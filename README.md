@@ -212,7 +212,13 @@ Open your browser at:
 
 👤 **Candide Giramata Muhoracyeye**
 
+* GitHub: [GiramataC](https://github.com/GiramataC)
+* LinkedIn: [https://www.linkedin.com/in/giramata-muhoracyeye-candide-a75ab9231/](https://www.linkedin.com/in/giramata-muhoracyeye-candide-a75ab9231/)
+
 👤 **Matia Mulumba Mukasa**
+
+* GitHub: [tr3p0l3m](https://github.com/tr3p0l3m)
+* LinkedIn: [https://www.linkedin.com/in/matiamulumbamukasa/](https://www.linkedin.com/in/matiamulumbamukasa/)
 
 Faculty Advisor: **Dr. George Okeyo**, CMU Africa
 
