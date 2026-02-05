@@ -210,6 +210,9 @@ Open your browser at:
 
 👤 **Violette Uwamungu**
 
+* GitHub: [VioletteUwamungu](https://github.com/VioletteUwamungu)
+* LinkedIn: [https://www.linkedin.com/in/violette-uwamungu-74b4bb184/](https://www.linkedin.com/in/violette-uwamungu-74b4bb184/)
+
 👤 **Candide Giramata Muhoracyeye**
 
 * GitHub: [GiramataC](https://github.com/GiramataC)
