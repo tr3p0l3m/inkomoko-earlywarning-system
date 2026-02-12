@@ -1,2 +1,34 @@
+# --------------------
+# Python / Backend
+# --------------------
+backend/.env
+backend/.venv
 backend/venv
+__pycache__/
+*.py[cod]
+*.log
+
+# Alembic / migrations cache
+backend/migrations/__pycache__/
+
+# --------------------
+# Conda
+# --------------------
+.conda/
+.envrc
+
+# --------------------
+# Frontend
+# --------------------
 frontend/node_modules
+frontend/.env
+frontend/dist
+frontend/build
+
+# --------------------
+# OS / Editor
+# --------------------
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

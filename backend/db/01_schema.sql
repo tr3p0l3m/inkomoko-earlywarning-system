@@ -28,17 +28,17 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- CREATE EXTENSION IF NOT EXISTS vector;
 
 
-CREATE TABLE ref_country (
+CREATE TABLE IF NOT EXISTS ref_country (
   country_code TEXT PRIMARY KEY,          -- e.g. "RW", "KE", "UG"
   country_name TEXT NOT NULL
 );
 
-CREATE TABLE ref_currency (
+CREATE TABLE IF NOT EXISTS ref_currency (
   currency_code TEXT PRIMARY KEY,         -- e.g. "RWF", "KES", "USD"
   currency_name TEXT NOT NULL
 );
 
-CREATE TABLE ref_program (
+CREATE TABLE IF NOT EXISTS ref_program (
   program_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   program_code TEXT UNIQUE,
   program_name TEXT NOT NULL,
@@ -46,7 +46,7 @@ CREATE TABLE ref_program (
   active BOOLEAN NOT NULL DEFAULT TRUE
 );
 
-CREATE TABLE ref_cohort (
+CREATE TABLE IF NOT EXISTS ref_cohort (
   cohort_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   cohort_name TEXT NOT NULL,              -- e.g. "2023 Q2 Rwanda Retail"
   cohort_year INT,
@@ -55,11 +55,11 @@ CREATE TABLE ref_cohort (
   program_id UUID REFERENCES ref_program(program_id) ON DELETE SET NULL,
   country_code TEXT REFERENCES ref_country(country_code) ON DELETE RESTRICT
 );
-CREATE INDEX idx_cohort_program ON ref_cohort(program_id);
-CREATE INDEX idx_cohort_country ON ref_cohort(country_code);
+CREATE INDEX IF NOT EXISTS idx_cohort_program ON ref_cohort(program_id);
+CREATE INDEX IF NOT EXISTS idx_cohort_country ON ref_cohort(country_code);
 
 
-CREATE TABLE dim_client (
+CREATE TABLE IF NOT EXISTS dim_client (
   client_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   external_client_key TEXT NOT NULL,       -- stable pseudonymous key from IMS (no PII)
   country_code TEXT REFERENCES ref_country(country_code) ON DELETE RESTRICT,
@@ -67,7 +67,7 @@ CREATE TABLE dim_client (
   UNIQUE (external_client_key, country_code)
 );
 
-CREATE TABLE dim_enterprise (
+CREATE TABLE IF NOT EXISTS dim_enterprise (
   enterprise_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   client_id UUID NOT NULL REFERENCES dim_client(client_id) ON DELETE CASCADE,
   external_enterprise_key TEXT NOT NULL,    -- stable pseudonymous key from IMS
@@ -79,14 +79,20 @@ CREATE TABLE dim_enterprise (
   UNIQUE (external_enterprise_key, client_id)
 );
 
-CREATE INDEX idx_enterprise_client ON dim_enterprise(client_id);
+CREATE INDEX IF NOT EXISTS idx_enterprise_client ON dim_enterprise(client_id);
 
 
-CREATE TYPE event_type AS ENUM (
-  'baseline', 'visit', 'endline', 'growth_tracker', 'training', 'investment', 'other'
-);
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'event_type') THEN
+    CREATE TYPE event_type AS ENUM (
+      'baseline', 'visit', 'endline', 'growth_tracker', 'training', 'investment', 'other'
+    );
+  END IF;
+END $$;
 
-CREATE TABLE fact_enterprise_event (
+
+CREATE TABLE IF NOT EXISTS fact_enterprise_event (
   event_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   enterprise_id UUID NOT NULL REFERENCES dim_enterprise(enterprise_id) ON DELETE CASCADE,
   cohort_id UUID REFERENCES ref_cohort(cohort_id) ON DELETE SET NULL,
@@ -104,12 +110,12 @@ CREATE TABLE fact_enterprise_event (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_event_enterprise_date ON fact_enterprise_event(enterprise_id, event_date DESC);
-CREATE INDEX idx_event_type_date ON fact_enterprise_event(event_type, event_date DESC);
-CREATE INDEX idx_event_country_date ON fact_enterprise_event(country_code, event_date DESC);
-CREATE INDEX idx_event_payload_gin ON fact_enterprise_event USING GIN(payload);
+CREATE INDEX IF NOT EXISTS idx_event_enterprise_date ON fact_enterprise_event(enterprise_id, event_date DESC);
+CREATE INDEX IF NOT EXISTS idx_event_type_date ON fact_enterprise_event(event_type, event_date DESC);
+CREATE INDEX IF NOT EXISTS idx_event_country_date ON fact_enterprise_event(country_code, event_date DESC);
+CREATE INDEX IF NOT EXISTS idx_event_payload_gin ON fact_enterprise_event USING GIN(payload);
 
-CREATE TABLE fact_kpi_snapshot (
+CREATE TABLE IF NOT EXISTS fact_kpi_snapshot (
   snapshot_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   enterprise_id UUID NOT NULL REFERENCES dim_enterprise(enterprise_id) ON DELETE CASCADE,
   cohort_id UUID REFERENCES ref_cohort(cohort_id) ON DELETE SET NULL,
@@ -137,12 +143,12 @@ CREATE TABLE fact_kpi_snapshot (
   UNIQUE (enterprise_id, as_of_date)
 );
 
-CREATE INDEX idx_kpi_asof_country ON fact_kpi_snapshot(as_of_date DESC, country_code);
-CREATE INDEX idx_kpi_enterprise ON fact_kpi_snapshot(enterprise_id, as_of_date DESC);
-CREATE INDEX idx_kpi_quality_gin ON fact_kpi_snapshot USING GIN(quality_flags);
+CREATE INDEX IF NOT EXISTS idx_kpi_asof_country ON fact_kpi_snapshot(as_of_date DESC, country_code);
+CREATE INDEX IF NOT EXISTS idx_kpi_enterprise ON fact_kpi_snapshot(enterprise_id, as_of_date DESC);
+CREATE INDEX IF NOT EXISTS idx_kpi_quality_gin ON fact_kpi_snapshot USING GIN(quality_flags);
 
 
-CREATE TABLE ml_model (
+CREATE TABLE IF NOT EXISTS ml_model (
   model_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   model_key TEXT NOT NULL UNIQUE,            -- e.g. "M1_RISK", "M2_JOBS_CREATED"
   model_name TEXT NOT NULL,
@@ -152,7 +158,7 @@ CREATE TABLE ml_model (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE ml_model_version (
+CREATE TABLE IF NOT EXISTS ml_model_version (
   model_version_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   model_id UUID NOT NULL REFERENCES ml_model(model_id) ON DELETE CASCADE,
 
@@ -175,14 +181,29 @@ CREATE TABLE ml_model_version (
   UNIQUE (model_id, version_tag)
 );
 
-CREATE INDEX idx_model_version_model ON ml_model_version(model_id, created_at DESC);
-CREATE INDEX idx_model_version_status ON ml_model_version(status);
+CREATE INDEX IF NOT EXISTS idx_model_version_model ON ml_model_version(model_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_model_version_status ON ml_model_version(status);
 
 -- another
-CREATE TYPE prediction_horizon AS ENUM ('1m','3m','6m','12m');
-CREATE TYPE prediction_kind AS ENUM ('classification','regression');
+-- CREATE TYPE prediction_horizon AS ENUM ('1m','3m','6m','12m');
+-- CREATE TYPE prediction_kind AS ENUM ('classification','regression');
 
-CREATE TABLE ml_prediction (
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'prediction_horizon') THEN
+    CREATE TYPE prediction_horizon AS ENUM ('1m','3m','6m','12m');
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'prediction_kind') THEN
+    CREATE TYPE prediction_kind AS ENUM ('classification','regression');
+  END IF;
+END $$;
+
+
+CREATE TABLE IF NOT EXISTS ml_prediction (
   prediction_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
   model_version_id UUID NOT NULL REFERENCES ml_model_version(model_version_id) ON DELETE RESTRICT,
@@ -204,12 +225,12 @@ CREATE TABLE ml_prediction (
   UNIQUE (model_version_id, enterprise_id, as_of_date, horizon, target_key)
 );
 
-CREATE INDEX idx_pred_enterprise_date ON ml_prediction(enterprise_id, as_of_date DESC);
-CREATE INDEX idx_pred_model_date ON ml_prediction(model_version_id, as_of_date DESC);
-CREATE INDEX idx_pred_target ON ml_prediction(target_key);
-CREATE INDEX idx_pred_expl_gin ON ml_prediction USING GIN(explanation);
+CREATE INDEX IF NOT EXISTS idx_pred_enterprise_date ON ml_prediction(enterprise_id, as_of_date DESC);
+CREATE INDEX IF NOT EXISTS idx_pred_model_date ON ml_prediction(model_version_id, as_of_date DESC);
+CREATE INDEX IF NOT EXISTS idx_pred_target ON ml_prediction(target_key);
+CREATE INDEX IF NOT EXISTS idx_pred_expl_gin ON ml_prediction USING GIN(explanation);
 
-CREATE TABLE sim_scenario (
+CREATE TABLE IF NOT EXISTS sim_scenario (
   scenario_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   scenario_name TEXT NOT NULL,
   scenario_type TEXT NOT NULL DEFAULT 'shock',    -- shock / policy / funding / compound
@@ -219,7 +240,7 @@ CREATE TABLE sim_scenario (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE sim_run (
+CREATE TABLE IF NOT EXISTS sim_run (
   sim_run_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   scenario_id UUID NOT NULL REFERENCES sim_scenario(scenario_id) ON DELETE CASCADE,
   model_version_id UUID REFERENCES ml_model_version(model_version_id) ON DELETE SET NULL,
@@ -231,7 +252,7 @@ CREATE TABLE sim_run (
   notes TEXT
 );
 
-CREATE TABLE sim_result (
+CREATE TABLE IF NOT EXISTS sim_result (
   sim_result_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   sim_run_id UUID NOT NULL REFERENCES sim_run(sim_run_id) ON DELETE CASCADE,
   enterprise_id UUID REFERENCES dim_enterprise(enterprise_id) ON DELETE CASCADE,
@@ -247,13 +268,13 @@ CREATE TABLE sim_result (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_simrun_scenario ON sim_run(scenario_id, started_at DESC);
-CREATE INDEX idx_simres_run ON sim_result(sim_run_id);
-CREATE INDEX idx_simres_enterprise ON sim_result(enterprise_id);
+CREATE INDEX IF NOT EXISTS idx_simrun_scenario ON sim_run(scenario_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_simres_run ON sim_result(sim_run_id);
+CREATE INDEX IF NOT EXISTS idx_simres_enterprise ON sim_result(enterprise_id);
 
 
 
-CREATE TABLE rag_document (
+CREATE TABLE IF NOT EXISTS rag_document (
   doc_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   doc_title TEXT NOT NULL,
   doc_type TEXT NOT NULL,                         -- policy/playbook/training/faq
@@ -266,7 +287,7 @@ CREATE TABLE rag_document (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE rag_chunk (
+CREATE TABLE IF NOT EXISTS rag_chunk (
   chunk_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   doc_id UUID NOT NULL REFERENCES rag_document(doc_id) ON DELETE CASCADE,
   chunk_index INT NOT NULL,
@@ -275,18 +296,20 @@ CREATE TABLE rag_chunk (
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
 
   -- Optional pgvector embedding
-  embedding vector(768),
+--   embedding vector(768),
+  embedding JSONB,
+
 
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (doc_id, chunk_index)
 );
 
-CREATE INDEX idx_rag_doc_active ON rag_document(is_active);
-CREATE INDEX idx_rag_chunk_doc ON rag_chunk(doc_id);
+CREATE INDEX IF NOT EXISTS idx_rag_doc_active ON rag_document(is_active);
+CREATE INDEX IF NOT EXISTS idx_rag_chunk_doc ON rag_chunk(doc_id);
 -- Optional ANN index if using pgvector
--- CREATE INDEX idx_rag_chunk_embedding ON rag_chunk USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+-- CREATE INDEX IF NOT EXISTS idx_rag_chunk_embedding ON rag_chunk USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
-CREATE TABLE rag_query_log (
+CREATE TABLE IF NOT EXISTS rag_query_log (
   rag_query_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID,
   query_text TEXT NOT NULL,
@@ -296,7 +319,7 @@ CREATE TABLE rag_query_log (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE rag_citation (
+CREATE TABLE IF NOT EXISTS rag_citation (
   rag_citation_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   rag_query_id UUID NOT NULL REFERENCES rag_query_log(rag_query_id) ON DELETE CASCADE,
   chunk_id UUID NOT NULL REFERENCES rag_chunk(chunk_id) ON DELETE RESTRICT,
@@ -305,11 +328,11 @@ CREATE TABLE rag_citation (
   quoted_span JSONB NOT NULL DEFAULT '{}'::jsonb     -- optional: {"start":..,"end":..}
 );
 
-CREATE INDEX idx_rag_citation_query ON rag_citation(rag_query_id, rank);
+CREATE INDEX IF NOT EXISTS idx_rag_citation_query ON rag_citation(rag_query_id, rank);
 
 
 
-CREATE TABLE auth_user (
+CREATE TABLE IF NOT EXISTS auth_user (
   user_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT UNIQUE NOT NULL,
   full_name TEXT,
@@ -318,20 +341,20 @@ CREATE TABLE auth_user (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE auth_role (
+CREATE TABLE IF NOT EXISTS auth_role (
   role_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   role_key TEXT UNIQUE NOT NULL,         -- "admin", "program_manager", "analyst", "advisor", "donor_view"
   role_name TEXT NOT NULL
 );
 
-CREATE TABLE auth_user_role (
+CREATE TABLE IF NOT EXISTS auth_user_role (
   user_id UUID NOT NULL REFERENCES auth_user(user_id) ON DELETE CASCADE,
   role_id UUID NOT NULL REFERENCES auth_role(role_id) ON DELETE CASCADE,
   PRIMARY KEY (user_id, role_id)
 );
 
 -- Optional scoping (country/program level)
-CREATE TABLE auth_scope (
+CREATE TABLE IF NOT EXISTS auth_scope (
   scope_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth_user(user_id) ON DELETE CASCADE,
   country_code TEXT REFERENCES ref_country(country_code),
@@ -339,11 +362,11 @@ CREATE TABLE auth_scope (
   cohort_id UUID REFERENCES ref_cohort(cohort_id),
   scope_metadata JSONB NOT NULL DEFAULT '{}'::jsonb
 );
-CREATE INDEX idx_scope_user ON auth_scope(user_id);
+CREATE INDEX IF NOT EXISTS idx_scope_user ON auth_scope(user_id);
 
 
 --
- CREATE TABLE audit_log (
+ CREATE TABLE IF NOT EXISTS audit_log (
   audit_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth_user(user_id) ON DELETE SET NULL,
 
@@ -358,12 +381,12 @@ CREATE INDEX idx_scope_user ON auth_scope(user_id);
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_audit_time ON audit_log(created_at DESC);
-CREATE INDEX idx_audit_user_time ON audit_log(user_id, created_at DESC);
-CREATE INDEX idx_audit_action ON audit_log(action);
+CREATE INDEX IF NOT EXISTS idx_audit_time ON audit_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_user_time ON audit_log(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);
 
 
-CREATE TABLE dq_contract (
+CREATE TABLE IF NOT EXISTS dq_contract (
   dq_contract_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   contract_name TEXT NOT NULL,
   description TEXT,
@@ -372,7 +395,7 @@ CREATE TABLE dq_contract (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE dq_report (
+CREATE TABLE IF NOT EXISTS dq_report (
   dq_report_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   dq_contract_id UUID NOT NULL REFERENCES dq_contract(dq_contract_id) ON DELETE CASCADE,
   as_of_date DATE NOT NULL,
@@ -382,7 +405,7 @@ CREATE TABLE dq_report (
   UNIQUE (dq_contract_id, as_of_date)
 );
 
-CREATE INDEX idx_dq_report_date ON dq_report(as_of_date DESC);
+CREATE INDEX IF NOT EXISTS idx_dq_report_date ON dq_report(as_of_date DESC);
 
 
 
